@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monte a Estrutura - Jogo de Química Orgânica</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        carbon: '#4a5568',
+                        oxygen: '#e53e3e',
+                        nitrogen: '#3182ce',
+                        hydrogen: '#f7fafc',
+                        special: '#38a169'
+                    },
+                    fontFamily: {
+                        'game': ['Poppins', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        .molecule-piece {
+            transition: all 0.3s ease;
+            cursor: grab;
+        }
+        .molecule-piece:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+        }
+        .drop-zone {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.drag-over {
+            border-color: #4299e1;
+            background-color: rgba(66, 153, 225, 0.1);
+        }
+        .molecule-bond {
+            stroke: #2d3748;
+            stroke-width: 2;
+        }
+        .molecule-bond.double {
+            stroke-width: 3;
+        }
+        .molecule-bond.triple {
+            stroke-width: 4;
+        }
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .success-glow {
+            animation: glow 1s ease-in-out;
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(72, 187, 120, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(72, 187, 120, 0.8); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen font-game">
+    <!-- Dark mode detection -->
+    <script>
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+    </script>
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-gray-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">🧪</span>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Monte a Estrutura</h1>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">Jogo de Química Orgânica</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-gray-900 dark:text-white" id="score">Pontuação: 0</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400" id="level">Nível: Iniciante</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Bloco Antes do Jogo (Cabeçalho Narrativo e Didático) -->
+    <section class="bg-gray-100 dark:bg-gray-800 border-t border-b border-gray-300 dark:border-gray-700 py-6 mb-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">🧬 Monte a Estrutura: Comece sua Jornada Molecular</h2>
+            <p class="mt-2 text-gray-700 dark:text-gray-300">Imagine que você é um arquiteto da matéria. Cada átomo, ligação e grupo funcional que você posiciona ajuda a dar forma a um composto real que pode estar em remédios, plásticos ou alimentos.</p>
+            
+            <div class="mt-4 text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                <p>🎯 <strong>Objetivo:</strong> Aprender a montar compostos orgânicos de forma interativa, explorando suas estruturas e funções.</p>
+                <p>📘 <strong>Conteúdos abordados:</strong> Grupos funcionais, cadeias carbônicas, valência, ligações químicas.</p>
+                <p>🧠 <strong>Habilidades:</strong> Raciocínio lógico, visão espacial, interpretação de fórmulas químicas.</p>
+                <p>🔍 <strong>Aplicação prática:</strong> Interpretação de compostos na indústria, na saúde e no cotidiano.</p>
+            </div>
+
+            <p class="mt-4 text-lg italic text-blue-700 dark:text-blue-300">"Se você pudesse ver as moléculas que compõem o mundo ao seu redor... conseguiria montá-las corretamente?"</p>
+        </div>
+    </section>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Game Mode Selection -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Modo de Jogo</h2>
+            <div class="flex flex-wrap gap-3">
+                <button id="modeLibre" class="mode-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    🎨 Modo Livre
+                </button>
+                <button id="modeDesafio" class="mode-btn bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    🎯 Modo Desafio
+                </button>
+                <button id="modeDidatico" class="mode-btn bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                    📚 Modo Didático
+                </button>
+            </div>
+        </div>
+
+        <!-- Challenge Display -->
+        <div id="challengeDisplay" class="bg-gradient-to-r from-purple-500 to-blue-600 text-white rounded-xl shadow-lg p-6 mb-6 hidden">
+            <h3 class="text-lg font-semibold mb-2">🎯 Desafio Atual</h3>
+            <p id="challengeText" class="text-lg"></p>
+            <p id="challengeFormula" class="text-sm opacity-90 mt-1"></p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Pieces Panel -->
+            <div class="lg:col-span-1">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 sticky top-6">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">🧩 Peças Disponíveis</h3>
+                    
+                    <!-- Chains -->
+                    <div class="mb-4">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cadeias Principais</h4>
+                        <div class="grid grid-cols-2 gap-2" id="chainPieces">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Functional Groups -->
+                    <div class="mb-4">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Grupos Funcionais</h4>
+                        <div class="grid grid-cols-2 gap-2" id="functionalPieces">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+                    
+                    <!-- Bonds -->
+                    <div class="mb-4">
+                        <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ligações</h4>
+                        <div class="grid grid-cols-3 gap-2" id="bondPieces">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Controls -->
+                    <div class="space-y-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <button id="clearBtn" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg font-medium transition-colors">
+                            🗑️ Limpar
+                        </button>
+                        <button id="validateBtn" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg font-medium transition-colors">
+                            ✅ Validar
+                        </button>
+                        <button id="hintBtn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 px-4 rounded-lg font-medium transition-colors">
+                            💡 Dica
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Game Area -->
+            <div class="lg:col-span-3">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">🔬 Área de Montagem</h3>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-600 dark:text-gray-400">Grade:</span>
+                            <button id="gridToggle" class="bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded text-sm font-medium">ON</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Assembly Area -->
+                    <div id="assemblyArea" class="relative bg-gray-50 dark:bg-gray-900 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 min-h-96 overflow-hidden">
+                        <svg id="moleculeSvg" class="w-full h-full absolute inset-0" viewBox="0 0 800 400">
+                            <!-- Grid will be drawn here -->
+                            <defs>
+                                <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
+                                </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#grid)" id="gridPattern"/>
+                        </svg>
+                        <div id="moleculeContainer" class="absolute inset-0 p-4">
+                            <!-- Molecular pieces will be placed here -->
+                        </div>
+                        <div id="dropMessage" class="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 pointer-events-none">
+                            <div class="text-center">
+                                <div class="text-4xl mb-2">🧪</div>
+                                <p class="text-lg font-medium">Arraste as peças aqui para montar sua molécula</p>
+                                <p class="text-sm">Use o modo livre para experimentar ou escolha um desafio</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Panel -->
+                <div id="resultsPanel" class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mt-6 hidden">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">📊 Resultado da Análise</h3>
+                    <div id="resultsContent">
+                        <!-- Results will be populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Tutorial Panel -->
+                <div id="tutorialPanel" class="bg-blue-50 dark:bg-blue-900 rounded-xl shadow-lg p-6 mt-6 hidden">
+                    <h3 class="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-4">📚 Tutorial</h3>
+                    <div id="tutorialContent" class="text-blue-800 dark:text-blue-200">
+                        <!-- Tutorial content will be populated by JS -->
+                    </div>
+                    <div class="flex justify-between mt-4">
+                        <button id="tutorialPrev" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            ← Anterior
+                        </button>
+                        <span id="tutorialStep" class="text-blue-700 dark:text-blue-300 font-medium"></span>
+                        <button id="tutorialNext" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+                            Próximo →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bloco Após o Jogo (Fechamento Educativo e Expansão) -->
+    <section class="bg-white dark:bg-gray-900 border-t border-gray-300 dark:border-gray-700 py-6 mt-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">🧠 O Que Você Aprendeu?</h2>
+            <ul class="list-disc pl-5 text-gray-700 dark:text-gray-300 space-y-1">
+                <li>Como identificar e posicionar grupos funcionais comuns.</li>
+                <li>Diferença entre ligações simples, duplas e triplas.</li>
+                <li>Valência típica de átomos como C, H, O e N.</li>
+                <li>Construção e validação de uma estrutura orgânica básica.</li>
+            </ul>
+
+            <div class="mt-6 bg-blue-50 dark:bg-blue-800 rounded-lg p-4">
+                <p class="text-blue-800 dark:text-blue-200">🔬 <strong>Curiosidade:</strong> A aspirina é composta por apenas nove átomos de carbono, mas sua estrutura determina completamente seu efeito no corpo humano!</p>
+            </div>
+
+            <div class="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                💡 <strong>Dica de estudo:</strong> Pense em uma molécula como um quebra-cabeça tridimensional. Cada átomo tem um número certo de "braços" (ligações) -- respeitar isso é a chave!
+            </div>
+
+            <div class="mt-4 text-sm">
+                📺 <a href="https://www.youtube.com/watch?v=HN7ckjY4kJg" target="_blank" class="text-blue-600 dark:text-blue-300 underline hover:text-blue-800">Assista a um vídeo sobre modelagem molecular interativa</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Notification Toast -->
+    <div id="notification" class="fixed top-4 right-4 max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 transform translate-x-full transition-transform duration-300 z-50">
+        <div class="flex items-center">
+            <div id="notificationIcon" class="text-2xl mr-3"></div>
+            <div>
+                <p id="notificationTitle" class="font-semibold text-gray-900 dark:text-white"></p>
+                <p id="notificationMessage" class="text-sm text-gray-600 dark:text-gray-400"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const gameState = {
+            currentMode: 'livre',
+            score: 0,
+            level: 'Iniciante',
+            placedPieces: [],
+            currentChallenge: null,
+            tutorialStep: 0,
+            gridEnabled: true,
+            draggedPiece: null
+        };
+
+        // Molecular pieces data
+        const molecularPieces = {
+            chains: [
+                { id: 'CH4', name: 'Metano', formula: 'CH₄', carbons: 1, color: '#4a5568' },
+                { id: 'C2H6', name: 'Etano', formula: 'C₂H₆', carbons: 2, color: '#4a5568' },
+                { id: 'C3H8', name: 'Propano', formula: 'C₃H₈', carbons: 3, color: '#4a5568' },
+                { id: 'C4H10', name: 'Butano', formula: 'C₄H₁₀', carbons: 4, color: '#4a5568' }
+            ],
+            functionalGroups: [
+                { id: 'OH', name: 'Álcool', formula: '-OH', color: '#e53e3e', bonds: 1 },
+                { id: 'COOH', name: 'Ácido', formula: '-COOH', color: '#e53e3e', bonds: 1 },
+                { id: 'CO', name: 'Cetona', formula: '=O', color: '#e53e3e', bonds: 2 },
+                { id: 'NH2', name: 'Amina', formula: '-NH₂', color: '#3182ce', bonds: 1 },
+                { id: 'CHO', name: 'Aldeído', formula: '-CHO', color: '#e53e3e', bonds: 1 },
+                { id: 'CH3', name: 'Metil', formula: '-CH₃', color: '#38a169', bonds: 1 }
+            ],
+            bonds: [
+                { id: 'single', name: 'Simples', symbol: '—', multiplicity: 1 },
+                { id: 'double', name: 'Dupla', symbol: '=', multiplicity: 2 },
+                { id: 'triple', name: 'Tripla', symbol: '≡', multiplicity: 3 }
+            ]
+        };
+
+        // Challenges data
+        const challenges = {
+            iniciante: [
+                { name: 'Etanol', formula: 'C₂H₆O', description: 'Monte o álcool mais comum', pieces: ['C2H6', 'OH'] },
+                { name: 'Ácido Acético', formula: 'C₂H₄O₂', description: 'Principal componente do vinagre', pieces: ['CH4', 'COOH'] },
+                { name: 'Propanona', formula: 'C₃H₆O', description: 'Conhecida como acetona', pieces: ['C3H8', 'CO'] }
+            ],
+            intermediario: [
+                { name: 'Butanol', formula: 'C₄H₁₀O', description: 'Álcool de cadeia mais longa', pieces: ['C4H10', 'OH'] },
+                { name: 'Metilamina', formula: 'CH₅N', description: 'Amina primária simples', pieces: ['CH4', 'NH2'] },
+                { name: 'Propanal', formula: 'C₃H₆O', description: 'Aldeído de três carbonos', pieces: ['C3H8', 'CHO'] }
+            ]
+        };
+
+        // Tutorial steps
+        const tutorialSteps = [
+            {
+                title: "Bem-vindo ao Monte a Estrutura!",
+                content: "Este jogo ensina como montar moléculas orgânicas. Vamos aprender o básico sobre estruturas moleculares."
+            },
+            {
+                title: "Entendendo as Peças",
+                content: "Cada peça representa um fragmento molecular:\n• Cinza = Carbono\n• Vermelho = Oxigênio\n• Azul = Nitrogênio\n• Verde = Grupos especiais"
+            },
+            {
+                title: "Como Montar",
+                content: "Arraste as peças da lateral para a área de montagem. As peças se conectam automaticamente quando próximas."
+            },
+            {
+                title: "Validação Química",
+                content: "O jogo verifica se sua molécula é quimicamente válida, respeitando as regras de valência e ligação."
+            },
+            {
+                title: "Modos de Jogo",
+                content: "• Modo Livre: Experimente livremente\n• Modo Desafio: Monte moléculas específicas\n• Modo Didático: Aprenda passo a passo"
+            }
+        ];
+
+        // Initialize game
+        function initGame() {
+            setupEventListeners();
+            populatePieces();
+            setMode('livre');
+            showNotification('🎮', 'Bem-vindo!', 'Escolha um modo de jogo para começar');
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Mode buttons
+            document.getElementById('modeLibre').addEventListener('click', () => setMode('livre'));
+            document.getElementById('modeDesafio').addEventListener('click', () => setMode('desafio'));
+            document.getElementById('modeDidatico').addEventListener('click', () => setMode('didatico'));
+
+            // Control buttons
+            document.getElementById('clearBtn').addEventListener('click', clearAssembly);
+            document.getElementById('validateBtn').addEventListener('click', validateMolecule);
+            document.getElementById('hintBtn').addEventListener('click', showHint);
+            document.getElementById('gridToggle').addEventListener('click', toggleGrid);
+
+            // Tutorial navigation
+            document.getElementById('tutorialPrev').addEventListener('click', () => navigateTutorial(-1));
+            document.getElementById('tutorialNext').addEventListener('click', () => navigateTutorial(1));
+
+            // Assembly area drop handling
+            const assemblyArea = document.getElementById('assemblyArea');
+            assemblyArea.addEventListener('dragover', handleDragOver);
+            assemblyArea.addEventListener('drop', handleDrop);
+        }
+
+        // Populate pieces in sidebar
+        function populatePieces() {
+            populateChainPieces();
+            populateFunctionalPieces();
+            populateBondPieces();
+        }
+
+        function populateChainPieces() {
+            const container = document.getElementById('chainPieces');
+            container.innerHTML = '';
+            
+            molecularPieces.chains.forEach(piece => {
+                const element = createPieceElement(piece, 'chain');
+                container.appendChild(element);
+            });
+        }
+
+        function populateFunctionalPieces() {
+            const container = document.getElementById('functionalPieces');
+            container.innerHTML = '';
+            
+            molecularPieces.functionalGroups.forEach(piece => {
+                const element = createPieceElement(piece, 'functional');
+                container.appendChild(element);
+            });
+        }
+
+        function populateBondPieces() {
+            const container = document.getElementById('bondPieces');
+            container.innerHTML = '';
+            
+            molecularPieces.bonds.forEach(piece => {
+                const element = createPieceElement(piece, 'bond');
+                container.appendChild(element);
+            });
+        }
+
+        // Create draggable piece element
+        function createPieceElement(piece, type) {
+            const div = document.createElement('div');
+            div.className = 'molecule-piece bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-center cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 border-2 border-transparent hover:border-blue-300';
+            div.draggable = true;
+            div.dataset.pieceId = piece.id;
+            div.dataset.pieceType = type;
+            
+            div.innerHTML = `
+                <div class="text-lg font-bold" style="color: ${piece.color || '#4a5568'}">${piece.formula || piece.symbol}</div>
+                <div class="text-xs text-gray-600 dark:text-gray-400 mt-1">${piece.name}</div>
+            `;
+
+            div.addEventListener('dragstart', handleDragStart);
+            div.addEventListener('click', () => addPieceToAssembly(piece, type));
+
+            return div;
+        }
+
+        // Drag and drop handlers
+        function handleDragStart(e) {
+            gameState.draggedPiece = {
+                id: e.target.dataset.pieceId,
+                type: e.target.dataset.pieceType
+            };
+            e.dataTransfer.effectAllowed = 'copy';
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            e.currentTarget.classList.add('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            
+            if (gameState.draggedPiece) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                addPieceToAssembly(getPieceData(gameState.draggedPiece), gameState.draggedPiece.type, x, y);
+                gameState.draggedPiece = null;
+            }
+        }
+
+        // Get piece data by ID and type
+        function getPieceData(draggedPiece) {
+            const { id, type } = draggedPiece;
+            
+            switch (type) {
+                case 'chain':
+                    return molecularPieces.chains.find(p => p.id === id);
+                case 'functional':
+                    return molecularPieces.functionalGroups.find(p => p.id === id);
+                case 'bond':
+                    return molecularPieces.bonds.find(p => p.id === id);
+                default:
+                    return null;
+            }
+        }
+
+        // Add piece to assembly area
+        function addPieceToAssembly(piece, type, x = null, y = null) {
+            const container = document.getElementById('moleculeContainer');
+            const dropMessage = document.getElementById('dropMessage');
+            
+            // Hide drop message if this is the first piece
+            if (gameState.placedPieces.length === 0) {
+                dropMessage.classList.add('hidden');
+            }
+
+            // Create positioned piece element
+            const pieceElement = document.createElement('div');
+            pieceElement.className = 'absolute bg-white dark:bg-gray-700 p-3 rounded-lg shadow-lg border-2 border-gray-200 dark:border-gray-600 cursor-move';
+            pieceElement.style.left = (x || Math.random() * 200) + 'px';
+            pieceElement.style.top = (y || Math.random() * 200) + 'px';
+            
+            pieceElement.innerHTML = `
+                <div class="text-center">
+                    <div class="text-lg font-bold" style="color: ${piece.color || '#4a5568'}">${piece.formula || piece.symbol}</div>
+                    <div class="text-xs text-gray-600 dark:text-gray-400">${piece.name}</div>
+                </div>
+                <button class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs hover:bg-red-600" onclick="removePiece(this.parentElement)">×</button>
+            `;
+
+            // Make piece draggable within assembly area
+            makeDraggable(pieceElement);
+            
+            container.appendChild(pieceElement);
+            
+            // Add to placed pieces
+            gameState.placedPieces.push({
+                id: Date.now(),
+                piece: piece,
+                type: type,
+                element: pieceElement,
+                x: parseFloat(pieceElement.style.left),
+                y: parseFloat(pieceElement.style.top)
+            });
+
+            // Add success animation
+            pieceElement.classList.add('success-glow');
+            setTimeout(() => pieceElement.classList.remove('success-glow'), 1000);
+        }
+
+        // Make element draggable within assembly area
+        function makeDraggable(element) {
+            let isDragging = false;
+            let startX, startY, initialX, initialY;
+
+            element.addEventListener('mousedown', startDrag);
+            element.addEventListener('touchstart', startDrag);
+
+            function startDrag(e) {
+                e.preventDefault();
+                isDragging = true;
+                
+                const clientX = e.clientX || e.touches[0].clientX;
+                const clientY = e.clientY || e.touches[0].clientY;
+                
+                startX = clientX;
+                startY = clientY;
+                initialX = parseFloat(element.style.left);
+                initialY = parseFloat(element.style.top);
+
+                document.addEventListener('mousemove', drag);
+                document.addEventListener('touchmove', drag);
+                document.addEventListener('mouseup', stopDrag);
+                document.addEventListener('touchend', stopDrag);
+            }
+
+            function drag(e) {
+                if (!isDragging) return;
+                e.preventDefault();
+                
+                const clientX = e.clientX || e.touches[0].clientX;
+                const clientY = e.clientY || e.touches[0].clientY;
+                
+                const newX = initialX + (clientX - startX);
+                const newY = initialY + (clientY - startY);
+                
+                element.style.left = Math.max(0, Math.min(newX, 600)) + 'px';
+                element.style.top = Math.max(0, Math.min(newY, 300)) + 'px';
+            }
+
+            function stopDrag() {
+                isDragging = false;
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('touchmove', drag);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchend', stopDrag);
+            }
+        }
+
+        // Remove piece from assembly
+        function removePiece(element) {
+            const index = gameState.placedPieces.findIndex(p => p.element === element);
+            if (index !== -1) {
+                gameState.placedPieces.splice(index, 1);
+                element.remove();
+                
+                // Show drop message if no pieces left
+                if (gameState.placedPieces.length === 0) {
+                    document.getElementById('dropMessage').classList.remove('hidden');
+                }
+            }
+        }
+
+        // Set game mode
+        function setMode(mode) {
+            gameState.currentMode = mode;
+            
+            // Update button states
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'bg-purple-600', 'bg-green-600');
+                btn.classList.add('bg-gray-300');
+            });
+
+            // Hide all panels
+            document.getElementById('challengeDisplay').classList.add('hidden');
+            document.getElementById('tutorialPanel').classList.add('hidden');
+
+            switch (mode) {
+                case 'livre':
+                    document.getElementById('modeLibre').classList.remove('bg-gray-300');
+                    document.getElementById('modeLibre').classList.add('bg-blue-600');
+                    showNotification('🎨', 'Modo Livre', 'Monte qualquer molécula livremente!');
+                    break;
+                case 'desafio':
+                    document.getElementById('modeDesafio').classList.remove('bg-gray-300');
+                    document.getElementById('modeDesafio').classList.add('bg-purple-600');
+                    startChallenge();
+                    break;
+                case 'didatico':
+                    document.getElementById('modeDidatico').classList.remove('bg-gray-300');
+                    document.getElementById('modeDidatico').classList.add('bg-green-600');
+                    startTutorial();
+                    break;
+            }
+        }
+
+        // Start challenge mode
+        function startChallenge() {
+            const levelChallenges = challenges[gameState.level.toLowerCase()] || challenges.iniciante;
+            const challenge = levelChallenges[Math.floor(Math.random() * levelChallenges.length)];
+            
+            gameState.currentChallenge = challenge;
+            
+            document.getElementById('challengeDisplay').classList.remove('hidden');
+            document.getElementById('challengeText').textContent = `Monte: ${challenge.name}`;
+            document.getElementById('challengeFormula').textContent = `Fórmula: ${challenge.formula} - ${challenge.description}`;
+            
+            showNotification('🎯', 'Novo Desafio!', `Monte: ${challenge.name}`);
+        }
+
+        // Start tutorial mode
+        function startTutorial() {
+            gameState.tutorialStep = 0;
+            document.getElementById('tutorialPanel').classList.remove('hidden');
+            updateTutorialContent();
+            showNotification('📚', 'Tutorial', 'Vamos aprender passo a passo!');
+        }
+
+        // Update tutorial content
+        function updateTutorialContent() {
+            const step = tutorialSteps[gameState.tutorialStep];
+            document.getElementById('tutorialContent').innerHTML = `
+                <h4 class="font-semibold mb-2">${step.title}</h4>
+                <p class="whitespace-pre-line">${step.content}</p>
+            `;
+            document.getElementById('tutorialStep').textContent = `${gameState.tutorialStep + 1} / ${tutorialSteps.length}`;
+            
+            // Update navigation buttons
+            document.getElementById('tutorialPrev').disabled = gameState.tutorialStep === 0;
+            document.getElementById('tutorialNext').disabled = gameState.tutorialStep === tutorialSteps.length - 1;
+        }
+
+        // Navigate tutorial
+        function navigateTutorial(direction) {
+            const newStep = gameState.tutorialStep + direction;
+            if (newStep >= 0 && newStep < tutorialSteps.length) {
+                gameState.tutorialStep = newStep;
+                updateTutorialContent();
+            }
+        }
+
+        // Clear assembly area
+        function clearAssembly() {
+            gameState.placedPieces.forEach(piece => piece.element.remove());
+            gameState.placedPieces = [];
+            document.getElementById('dropMessage').classList.remove('hidden');
+            document.getElementById('resultsPanel').classList.add('hidden');
+            showNotification('🗑️', 'Limpo!', 'Área de montagem limpa');
+        }
+
+        // Validate molecule
+        function validateMolecule() {
+            if (gameState.placedPieces.length === 0) {
+                showNotification('⚠️', 'Atenção', 'Adicione algumas peças primeiro!');
+                return;
+            }
+
+            const analysis = analyzeMolecule();
+            displayResults(analysis);
+            
+            if (analysis.isValid) {
+                updateScore(10);
+                showNotification('✅', 'Molécula Válida!', `${analysis.name || 'Composto'} identificado`);
+            } else {
+                showNotification('❌', 'Molécula Inválida', analysis.errors[0]);
+            }
+        }
+
+        // Analyze placed molecule
+        function analyzeMolecule() {
+            const pieces = gameState.placedPieces;
+            let totalCarbons = 0;
+            let totalOxygens = 0;
+            let totalNitrogens = 0;
+            let functionalGroups = [];
+            let errors = [];
+
+            // Count atoms and functional groups
+            pieces.forEach(placedPiece => {
+                const piece = placedPiece.piece;
+                if (placedPiece.type === 'chain') {
+                    totalCarbons += piece.carbons || 0;
+                } else if (placedPiece.type === 'functional') {
+                    functionalGroups.push(piece);
+                    if (piece.id.includes('O')) totalOxygens++;
+                    if (piece.id.includes('N')) totalNitrogens++;
+                }
+            });
+
+            // Basic validation
+            const isValid = errors.length === 0;
+            let name = '';
+            let formula = '';
+
+            // Try to identify the molecule
+            if (isValid) {
+                const identification = identifyMolecule(totalCarbons, functionalGroups);
+                name = identification.name;
+                formula = identification.formula;
+            }
+
+            return {
+                isValid,
+                name,
+                formula,
+                totalCarbons,
+                totalOxygens,
+                totalNitrogens,
+                functionalGroups: functionalGroups.map(fg => fg.name),
+                errors
+            };
+        }
+
+        // Identify molecule based on composition
+        function identifyMolecule(carbons, functionalGroups) {
+            // Simple identification logic
+            if (carbons === 1 && functionalGroups.some(fg => fg.id === 'OH')) {
+                return { name: 'Metanol', formula: 'CH₄O' };
+            } else if (carbons === 2 && functionalGroups.some(fg => fg.id === 'OH')) {
+                return { name: 'Etanol', formula: 'C₂H₆O' };
+            } else if (carbons === 2 && functionalGroups.some(fg => fg.id === 'COOH')) {
+                return { name: 'Ácido Acético', formula: 'C₂H₄O₂' };
+            } else if (carbons === 3 && functionalGroups.some(fg => fg.id === 'CO')) {
+                return { name: 'Propanona (Acetona)', formula: 'C₃H₆O' };
+            } else if (carbons === 1 && functionalGroups.some(fg => fg.id === 'NH2')) {
+                return { name: 'Metilamina', formula: 'CH₅N' };
+            } else {
+                return { name: 'Composto Orgânico', formula: `C${carbons}H?O?N?` };
+            }
+        }
+
+        // Display analysis results
+        function displayResults(analysis) {
+            const panel = document.getElementById('resultsPanel');
+            const content = document.getElementById('resultsContent');
+            
+            content.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Identificação</h4>
+                        <p class="text-lg font-medium ${analysis.isValid ? 'text-green-600' : 'text-red-600'}">
+                            ${analysis.name || 'Não identificado'}
+                        </p>
+                        <p class="text-sm text-gray-600 dark:text-gray-400">${analysis.formula}</p>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Composição</h4>
+                        <p class="text-sm">Carbonos: ${analysis.totalCarbons}</p>
+                        <p class="text-sm">Oxigênios: ${analysis.totalOxygens}</p>
+                        <p class="text-sm">Nitrogênios: ${analysis.totalNitrogens}</p>
+                    </div>
+                </div>
+                
+                ${analysis.functionalGroups.length > 0 ? `
+                    <div class="mt-4 bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                        <h4 class="font-semibold text-gray-900 dark:text-white mb-2">Grupos Funcionais</h4>
+                        <p class="text-sm">${analysis.functionalGroups.join(', ')}</p>
+                    </div>
+                ` : ''}
+                
+                ${analysis.errors.length > 0 ? `
+                    <div class="mt-4 bg-red-50 dark:bg-red-900 p-4 rounded-lg">
+                        <h4 class="font-semibold text-red-900 dark:text-red-100 mb-2">Problemas Encontrados</h4>
+                        ${analysis.errors.map(error => `<p class="text-sm text-red-800 dark:text-red-200">• ${error}</p>`).join('')}
+                    </div>
+                ` : ''}
+                
+                <div class="mt-4 bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
+                    <h4 class="font-semibold text-blue-900 dark:text-blue-100 mb-2">Status da Validação</h4>
+                    <div class="flex items-center">
+                        <span class="text-2xl mr-2">${analysis.isValid ? '✅' : '❌'}</span>
+                        <span class="font-medium ${analysis.isValid ? 'text-green-600' : 'text-red-600'}">
+                            ${analysis.isValid ? 'Molécula Válida' : 'Molécula Inválida'}
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            panel.classList.remove('hidden');
+        }
+
+        // Show hint
+        function showHint() {
+            let hint = '';
+            
+            if (gameState.currentMode === 'desafio' && gameState.currentChallenge) {
+                const challenge = gameState.currentChallenge;
+                hint = `Para montar ${challenge.name}, você precisa de: ${challenge.pieces.join(', ')}`;
+            } else {
+                const hints = [
+                    'Carbono sempre faz 4 ligações',
+                    'Oxigênio faz 2 ligações',
+                    'Nitrogênio faz 3 ligações',
+                    'Grupos funcionais definem as propriedades da molécula',
+                    'Verifique se todos os átomos têm o número correto de ligações'
+                ];
+                hint = hints[Math.floor(Math.random() * hints.length)];
+            }
+            
+            showNotification('💡', 'Dica', hint);
+        }
+
+        // Toggle grid
+        function toggleGrid() {
+            gameState.gridEnabled = !gameState.gridEnabled;
+            const gridPattern = document.getElementById('gridPattern');
+            const toggle = document.getElementById('gridToggle');
+            
+            if (gameState.gridEnabled) {
+                gridPattern.style.display = 'block';
+                toggle.textContent = 'ON';
+                toggle.classList.remove('bg-red-200');
+                toggle.classList.add('bg-gray-200');
+            } else {
+                gridPattern.style.display = 'none';
+                toggle.textContent = 'OFF';
+                toggle.classList.remove('bg-gray-200');
+                toggle.classList.add('bg-red-200');
+            }
+        }
+
+        // Update score
+        function updateScore(points) {
+            gameState.score += points;
+            document.getElementById('score').textContent = `Pontuação: ${gameState.score}`;
+            
+            // Check for level up
+            if (gameState.score >= 100 && gameState.level === 'Iniciante') {
+                gameState.level = 'Intermediário';
+                document.getElementById('level').textContent = `Nível: ${gameState.level}`;
+                showNotification('🎉', 'Level Up!', 'Agora você é intermediário!');
+            }
+        }
+
+        // Show notification
+        function showNotification(icon, title, message) {
+            const notification = document.getElementById('notification');
+            document.getElementById('notificationIcon').textContent = icon;
+            document.getElementById('notificationTitle').textContent = title;
+            document.getElementById('notificationMessage').textContent = message;
+            
+            notification.classList.remove('translate-x-full');
+            
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+            }, 3000);
+        }
+
+        // Initialize game when page loads
+        document.addEventListener('DOMContentLoaded', initGame);
+    </script>
+</body>
+</html>
